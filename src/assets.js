@@ -30,11 +30,13 @@ export function frames(node) {
  * The frame a list of frames shows `t` ms in (each frame its own delay, 100 without one): looping, or held on the
  * last one once played through.
  */
+/** A frame's own delay, or this when the node carries none. */
+const FRAME_DELAY_MS = 100;
 export function frameAt(fr, t, loop = true) {
   if (!fr?.length) return null;
-  const total = fr.reduce((s, f) => s + (Number(f.delay) || 100), 0) || 1;
+  const total = fr.reduce((s, f) => s + (Number(f.delay) || FRAME_DELAY_MS), 0) || 1;
   let r = loop ? t % total : Math.min(t, total - 1), i = 0;
-  while (i < fr.length - 1 && r >= (Number(fr[i].delay) || 100)) r -= Number(fr[i++].delay) || 100;
+  while (i < fr.length - 1 && r >= (Number(fr[i].delay) || FRAME_DELAY_MS)) r -= Number(fr[i++].delay) || FRAME_DELAY_MS;
   return fr[i];
 }
 
@@ -98,7 +100,7 @@ export class Assets {
     // one that failed to load (a dropped connection) is tried again 5s later, three tries in all
     const retry = e?.err && e.tries < 3 && performance.now() - e.failedAt > 5000;
     if (!e || retry) {
-      e = { img: null, ready: false, tries: e?.tries || 0, src: `${this.base}/${node._canvas}`, pri: this.waiting.length, started: false, sheet: node._canvas.startsWith('_sheets/') ? node : null };
+      e = { img: null, ready: false, tries: e?.tries || 0, src: `${this.base}/${node._canvas}`, pri: e?.pri ?? this.waiting.length, started: false, sheet: node._canvas.startsWith('_sheets/') ? node : null };
       e.promise = new Promise((res) => { e.settle = res; });
       this.imgCache.set(node._canvas, e);
     }
