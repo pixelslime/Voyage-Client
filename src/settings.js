@@ -21,6 +21,9 @@ export const FPS_CHOICES = [['vsync', 'VSync'], [60, '60 FPS'], [30, '30 FPS']];
 
 export const settings = { ...DEFAULTS };
 try { Object.assign(settings, JSON.parse(readKept(KEY) || '{}')); } catch { /* bad data: the defaults */ }
+// a stored FRAME RATE that isn't one of the choices (a stale blob's "60" string, say) used to fall through the System
+// Option's findIndex to VSync by accident: put it back to the default here, so the fallback is deliberate
+if (!FPS_CHOICES.some(([v]) => v === settings.fps)) settings.fps = DEFAULTS.fps;
 
 export function saveSettings() {
   writeKept(KEY, JSON.stringify(settings));
