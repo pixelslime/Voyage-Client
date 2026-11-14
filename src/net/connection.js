@@ -67,6 +67,14 @@ export class Connection {
           const version = r.short(); const patch = r.string();
           const sendIv = r.bytes(4), recvIv = r.bytes(4), locale = r.ubyte();
           this.hello = { version, patch, locale };
+          // the ciphers are keyed on VERSION: a server announcing another one would only decrypt garbage
+          if (version !== VERSION) {
+            const err = new Error(`server speaks protocol ${version}, client speaks ${VERSION}`);
+            err.hello = this.hello;
+            this._fail(err);
+            this.close();
+            return;
+          }
           this.send_ = new MapleCipher(sendIv, VERSION);
           this.recv = new MapleCipher(recvIv, 0xffff - VERSION);
           this._ready(this.hello);
@@ -90,11 +98,11 @@ export class Connection {
     const r = new PacketReader(body);
     const op = r.ushort();
     if (this.log) console.debug('<<', op.toString(16), body.length);
+    const t0 = this.timing ? performance.now() : 0;
     const wi = this.waiters.findIndex((w) => w.ops.includes(op));
-    if (wi >= 0) { this.waiters.splice(wi, 1)[0].res(r, op); return; }
+    if (wi >= 0) { this.waiters.splice(wi, 1)[0].res(r, op); this.timing?.(op, performance.now() - t0); return; }
     const fn = this.handlers.get(op);
     if (fn) {
-      const t0 = this.timing ? performance.now() : 0;
       try { fn(r, op); } catch (e) { console.error(`handler 0x${op.toString(16)} failed`, e); }
       this.timing?.(op, performance.now() - t0);   // set by the /fps meter
     } else {
