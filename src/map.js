@@ -1624,4 +1624,3 @@ export function artTag(ctx, assets, N, text, x, y, font = TAG_FONT) {
 const artSprites = new Map();
 let artIds = 0;
 
-export { PHYS };
