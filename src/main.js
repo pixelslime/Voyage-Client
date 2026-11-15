@@ -8,8 +8,12 @@ import { wsTransport } from './net/connection.js';
 import { modal } from './ui/dom.js';
 import { setupTouchDevice } from './touchdevice.js';
 import { loadConfig } from './config.js';
+import { applyResolution } from './view.js';
 
 setupTouchDevice();
+// boot step: the view is sized before any game or UI code reads it. It used to happen on importing view.js, which
+// made the module unimportable outside a browser and leaned on ESM evaluation order to be right.
+applyResolution();
 
 const PRELOAD = ['stand1', 'stand2', 'walk1', 'walk2', 'jump', 'prone', 'ladder', 'rope', 'alert',
   // every pose the attack tables can pick (character.js ATTACK_POSES / SHOOT_POSES), so the first stab or shot
