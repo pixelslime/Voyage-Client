@@ -64,6 +64,13 @@ const SLOT_TIMEOUT_MS = 20000;
 /** A failed load is tried again after this long, this many tries in all (a dropped connection). */
 const RETRY_ATTEMPTS = 3, RETRY_AFTER_MS = 5000;
 
+/** What a picture is asked for by: its own version or its .img's when the customs folder changes it, else the assets'. */
+function pictureVersion(canvas) {
+  const own = config.custom?.[canvas], at = canvas.indexOf('.img/'), img = at > 0 ? config.custom?.[canvas.slice(0, at + 4)] : null;
+  const v = own || img || config.assets;
+  return v ? `?v=${v}` : '';
+}
+
 export class Assets {
   constructor(base = '/assets') {
     this.base = base;
@@ -80,6 +87,9 @@ export class Assets {
     this._slice = { img: null, x: 0, y: 0, w: 0, h: 0 };
   }
 
+  /** Drops a file the page holds (null: every one), so the next ask fetches it again. */
+  forget(path) { if (path === null) this.jsonCache.clear(); else this.jsonCache.delete(path); }
+
   json(path) {
     if (!this.jsonCache.has(path)) {
       const wz = path.split('/')[0];
@@ -89,10 +99,13 @@ export class Assets {
         const t0 = performance.now();
         try { return JSON.parse(text); } finally { spent('files', t0); }
       });
-      const own = () => get(`${this.base}/${path}.json`);
+      // (a file the customs folder changes is asked for by its version, the rest by which assets these are: either
+      // way a copy the browser kept of an older one isn't used)
+      const ver = config.custom?.[path] || config.assets;
+      const own = () => get(`${this.base}/${path}.json${ver ? `?v=${ver}` : ''}`);
       // a file the server packs into sheets is asked for with its images' places in them (one it has no sheets for
       // comes back as it is); if that can't be had, the file as it is
-      const p = (config.sheets && PACKED.test(path) ? get(`${this.base}/_sheets/${path}.json`).then((tree) => tree || own(), own) : own())
+      const p = (config.sheets && PACKED.test(path) ? get(`${this.base}/_sheets/${path}.json${ver ? `?v=${ver}` : ''}`).then((tree) => tree || own(), own) : own())
         .then((tree) => { if (!tree) return null; const t0 = performance.now(); try { return prepare(tree, wz); } finally { spent('files', t0, 0); } })
         .catch(() => { this.jsonCache.delete(path); return null; });   // a dropped connection: asked again next time
       this.jsonCache.set(path, p);
@@ -108,7 +121,7 @@ export class Assets {
       // so carrying it would read as "this band's own place is taken" and never re-queue it
       const rePri = retry ? pri : (e?.pri ?? this.waiting.length);
       const queued = retry && e.pri !== undefined;
-      e = { img: null, ready: false, tries: e?.tries || 0, src: `${this.base}/${node._canvas}`, pri: rePri, started: false, sheet: node._canvas.startsWith('_sheets/') ? node : null };
+      e = { img: null, ready: false, tries: e?.tries || 0, src: `${this.base}/${node._canvas}${node._canvas.startsWith('_sheets/') ? '' : pictureVersion(node._canvas)}`, pri: rePri, started: false, sheet: node._canvas.startsWith('_sheets/') ? node : null };
       e.promise = new Promise((res) => { e.settle = res; });
       this.imgCache.set(node._canvas, e);
       if (queued) { this.waiting[rePri].push(e); this._pump(); }
@@ -230,7 +243,7 @@ export class Assets {
  * a link, four times at most). Every map, character, monster and window is read through here, so it is kept light:
  * nothing is copied or remembered for a node that has no link in it.
  */
-function prepare(tree, wz) {
+export function prepare(tree, wz) {
   if (!tree || typeof tree !== 'object') return tree;
   const sheets = new Map(), links = [], above = [];
   (function walk(node) {

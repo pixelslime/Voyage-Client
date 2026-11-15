@@ -82,7 +82,7 @@ import { bridgeUrl } from './ui/login-ui.js';
 import { settings, saveSettings } from './settings.js';
 import { gameOptions, optionOn } from './gameopt.js';
 import { VIEW_W, VIEW_H, UI_W, UI_H, UI_SCALE, applyResolution, snapPx, setPixelScale, PIXEL_SCALE } from './view.js';
-import { config } from './config.js';
+import { config, refreshPublished } from './config.js';
 import { frameMaker } from './framemaker.js';
 import { DirectionScene } from './direction.js';
 import { readSets, wornSet } from './seteff.js';
@@ -1100,7 +1100,7 @@ export class Game {
   enterCashShop() { if (this.net && !this.inCashShop) this.net.enterCashShop(); }
   /**
    * The status bar's MTS button: ENTER_MTS, one request at a time (500ms apart, none waiting for its answer), and not
-   * where the map forbids it (fieldLimit 0x10). Cosmic with the MTS off answers with enableActions.
+   * where the map forbids it (fieldLimit 0x10). The game server with the MTS off answers with enableActions.
    */
   enterMTS() {
     if (!this.net || this.inCashShop || !this.canExclusive(500, true)) return;
@@ -3423,7 +3423,12 @@ export class Game {
       }),
       weather: later((type, id, text) => { if (id) this.weather.start(id, text); else this.weather.stop(); }),
       // 4: a sound from Sound/Field.img; 6: the map's music changes until the next map
-      police: (text) => this.windows.notice(text),
+      // the notice the server sends before it cuts you off (kicked, banned): if the cut comes while it is up, its OK
+      // goes back to the login screen; if it was closed already, it comes up again in place of the update box
+      police: (text) => {
+        const note = this.cutOffNote = { text, open: true };
+        this.windows.notice(text).then(() => { note.open = false; if (this.leaving === true) this.leave(); });
+      },
       fieldEffect: later((type, str) => {
         if (type === 3 && str) this.vfx.screen(str);   // 3: Map/Effect.img/<str> on the screen
         if (type === 4 && str) sfx.play(`Field/${str}`);
@@ -3827,7 +3832,12 @@ export class Game {
         }
       },
       // the game's small box with its OK; back to the login screen once it is clicked (no leave-page warning now)
-      disconnected: () => { this.leaving = true; this.windows.okCancel('There was an update to the client. Press ok to reload.', 'ok').then(() => this.leave()); },
+      disconnected: () => {
+        this.leaving = true;
+        const note = this.cutOffNote;
+        if (note?.open) return;
+        this.windows.okCancel(note ? note.text : 'There was an update to the client. Press ok to reload.', 'ok').then(() => this.leave());
+      },
     });
     const loaded = this.changeMap(entered.mapId, { portalIdx: entered.portal });
     this.net.flush(); // buffered spawns queue up behind the map load
@@ -4349,6 +4359,9 @@ export class Game {
     let status = `Loading map ${id}...`, slow = false;
     const slowTimer = setTimeout(() => { if (current()) { slow = true; this.hooks.onLoading?.(true, status); } }, 1500);
     try {
+      // a map published to the customs folder (or taken out of it) since the page loaded: the new one
+      await refreshPublished((path) => this.assets.forget(path));
+      if (!current()) return;
       const map = new GameMap(this.assets, id);
       await Promise.all([
         map.load((s) => { status = s; if (slow && current()) this.hooks.onLoading?.(true, s); }, { life: !this.net }),
@@ -6321,7 +6334,7 @@ export class Game {
   }
 
   /**
-   * Natural regeneration is client-driven in v83 (HEAL_OVER_TIME). Cosmic rejects heals faster than
+   * Natural regeneration is client-driven in v83 (HEAL_OVER_TIME). The game server rejects heals faster than
    * 1.5s apart and autobans HP heals above 77 * map recovery * 1.5, so stay at the classic +10 HP / 10s.
    */
   /**
@@ -6456,6 +6469,8 @@ export class Game {
     const inY = (held('down') ? 1 : 0) - (held('up') ? 1 : 0);
     let action;
     if (p.ignoreT > 0 && (p.ignoreT -= dt) <= 0) p.ignoreFh = null;
+    // what the air step goes by: the group of the floor you stand on (its walls are the ones that stop you)
+    if (p.fh) p.zMass = p.fh.zMass;
     if (p.fh || p.ladder) this.fjUsed = false;   // Flash Jump comes back once you land
     if (this.portalCooldown > 0) this.portalCooldown -= dt;
 
@@ -6775,6 +6790,7 @@ export class Game {
     const p = this.player;
     this.moveEvent = { kind: 'grab', fh: p.fh?.id || 0, stance: this.currentStance() };   // how you were before it
     p.ladder = l; p.fh = null; p.x = l.x; p.vx = 0; p.vy = 0;
+    p.zMass = 0;   // (on a ladder or a rope you are of no floor's group)
   }
   // ------------------------------------------------------------------ death
   /**
@@ -6833,6 +6849,7 @@ export class Game {
     const p = this.player;
     p.ladder = null; p.seat = null; p.attack = null;
     if (p.ignoreT > 0 && (p.ignoreT -= dt) <= 0) p.ignoreFh = null;
+    if (p.fh) p.zMass = p.fh.zMass;
     this.coast(dt);
   }
   /** No input: on a floor you slide to a stop, in the air you fall (and stop on landing). */
@@ -6972,7 +6989,7 @@ export class Game {
 
   /**
    * Basic attack (skillId 0) or skill. kind: melee | ranged | magic | special.
-   * Damage, MP cost and ammo are validated by Cosmic; the client picks targets and rolls damage.
+   * Damage, MP cost and ammo are validated by the game server; the client picks targets and rolls damage.
    * opts.held: a shot of a skill whose key is held (Hurricane, Rapid Fire, Piercing Arrow), fired from the pose it holds
    * (opts.quiet: without the skill's Use; opts.stance: the action sent for it);
    * opts.charge: how long Piercing Arrow was charged (ms).
@@ -7065,7 +7082,7 @@ export class Game {
     } else { if (!opts.quiet) sfx.play(`Skill/${pad(skillId, 7)}/Use`); if (swingSound) this.playWeaponSound(p); }
 
     const mobCount = ld?.mobCount || 1;
-    // fixdamage skills must deal exactly that much per monster (Cosmic autobans anything else)
+    // fixdamage skills must deal exactly that much per monster (the game server autobans anything else)
     // Shadow Partner throws as many again: its lines follow yours, at y% of them (x% for a plain throw)
     const sp = kind === 'ranged' && !NO_PARTNER.has(skillId) ? this.partner() : null;
     const base = ld?.fixdamage || opts.stage2 ? 1 : ld?.attackCount || ld?.bulletCount || 1;
@@ -8078,7 +8095,7 @@ export class Game {
   // ------------------------------------------------------------------ Mystic Door
   /**
    * A Mystic Door's end on this map (Skill/231.img/skill/2311002): out in the field the pulsing mDoor, in town the
-   * opening cDoor (openms's pairing). One just opened can't be used for 3s (Cosmic's deployment).
+   * opening cDoor (openms's pairing). One just opened can't be used for 3s (the game server's deployment).
    */
   async addDoor(key, x, y, town, launched, to = 0) {
     this.doors ??= new Map();
@@ -10758,7 +10775,7 @@ export class Game {
   }
   /**
    * A Hired Merchant's place in the draw order: the page and zMass of the foothold its spawn names. From a server
-   * that names none (0, as Cosmic sends) it is on page 7, over every layer of the map, as anything placed without a
+   * that names none (0, as the game server sends) it is on page 7, over every layer of the map, as anything placed without a
    * foothold is.
    */
   merchantZ(m) {

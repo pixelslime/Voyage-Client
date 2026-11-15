@@ -128,7 +128,7 @@ export class Connection {
 }
 
 /**
- * Browser transport: a binary WebSocket to the bridge, which relays to Cosmic's TCP port. The bridge
+ * Browser transport: a binary WebSocket to the bridge, which relays to the game server's TCP port. The bridge
  * sends a text 'hb' every 10s; SILENCE ms without any frame (counted from the connect, so a link that
  * dies before the first heartbeat is caught too) means the link died without a close (a dropped tunnel
  * or network) and the transport reports itself closed.

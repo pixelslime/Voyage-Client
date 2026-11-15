@@ -10,9 +10,9 @@ import { UI_W } from '../view.js';
  *   LEVEL [min] ABOVE [max] UNDER  PARTY MEMBER [n] PPL row (boxes at x 45 / 105 / 231 of it), party3 ALL JOBS,
  *   party4 the job boxes (287x187: two small boxes on the left, two tall ones, three below).
  *   START sends the search (PARTY_SEARCH_START: min, max, members, job bits); STOP ends it
- *   (PARTY_SEARCH_UPDATE). The server has no pause or resume, so the window offers only STOP.
- *   Find Party: Party/party0..3. Cosmic takes no registration - anyone without a party can be invited.
- * Job bits follow Cosmic's PartySearchCoordinator table.
+ *   (PARTY_SEARCH_UPDATE). The game server has no pause or resume, so the window offers only STOP.
+ *   Find Party: Party/party0..3. The game server takes no registration - anyone without a party can be invited.
+ * Job bits follow the game server's PartySearchCoordinator table.
  */
 const GROUPS = [
   // [box x, box y, width, title, [[job bit, name]...]] inside party4

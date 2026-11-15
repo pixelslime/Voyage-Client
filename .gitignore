@@ -28,3 +28,5 @@ __pycache__/
 nohup.out
 *.bak-loading
 *.bak-heartbeat
+# This machine's settings for docker compose (where the assets are)
+.env

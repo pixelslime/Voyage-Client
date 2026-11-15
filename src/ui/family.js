@@ -177,7 +177,7 @@ export class FamilyTreeWin extends Win {
   /**
    * BYE: a junior picked (or named) is dropped; your senior (or yourself) picked, you leave them. The client's words:
    * (lv / 20 + 10) x lv x 2 Reputation, lv the junior's (yours when you leave), with the senior above's share when
-   * there is one - that second figure was lost in the decompile and is taken as half, as Cosmic deducts it - and a
+   * there is one - that second figure was lost in the decompile and is taken as half, as the game server deducts it - and a
    * fee of (d + 2500) x d mesos, d how far the senior's level is above the junior's.
    */
   async separate() {

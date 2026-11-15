@@ -50,11 +50,14 @@ Server.Port = 3000
 
 #
 #     Server.AssetsDir
-#        Description: The folder holding the extracted WZ files (JSON + PNG), relative to the
-#                     folder server.js is in.
-#        Default:     "assets"
+#        Description: The assets folder the Voyage extractor made (JSON + PNG), relative to the
+#                     folder server.js is in. Voyage-Server and Voyage-Editor point at the same one.
+#                     A file in its customs folder (assets/customs, laid out like the assets) is
+#                     served in place of the one of the same name, and one only it has is served
+#                     as well: that is where Voyage-Editor publishes to.
+#        Default:     "../voyage-assets"
 
-Server.AssetsDir = "assets"
+Server.AssetsDir = "../voyage-assets"
 
 #
 #     Server.Sheets
@@ -87,14 +90,14 @@ Server.CacheDir = "cache"
 # RELAY
 #
 #     Relay.Servers
-#        Description: The Cosmic servers the relay connects players to, as name=host pairs
-#                     separated by commas, e.g. "cosmic=192.168.2.2,test=10.0.0.5". With more than
+#        Description: The game servers the relay connects players to, as name=host pairs
+#                     separated by commas, e.g. "gameserver=127.0.0.1,test=10.0.0.5". With more than
 #                     one, the login screen lets players pick; the first is the default. A host
 #                     on its own ("10.0.0.5") is named after itself. Only the login port (8484) and
 #                     the channel ports (7575-7699) are relayed.
-#        Default:     "cosmic=192.168.2.2"
+#        Default:     "gameserver=127.0.0.1"
 
-Relay.Servers = "cosmic=192.168.2.2"
+Relay.Servers = "gameserver=127.0.0.1"
 
 #
 ###################################################################################################
@@ -133,7 +136,7 @@ Account.SkipBirthdayCode = false
 
 #
 #     Account.BirthdayCode
-#        Description: The code sent when Account.SkipBirthdayCode is on, as YYYYMMDD. Cosmic
+#        Description: The code sent when Account.SkipBirthdayCode is on, as YYYYMMDD. The game server
 #                     gives every account it creates the birthday 2005-05-11; change this if your
 #                     accounts have another. With the skip on, every player's browser is sent this
 #                     code, so don't use a birthday that should stay private.

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import { ConfigMgr } from './configmgr.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const SERVERS = 'cosmic=192.168.2.2';
+const SERVERS = 'gameserver=127.0.0.1';
 
 /** server.js's settings from conf/client.conf. Keys and defaults match conf/client.conf.dist. */
 export const ServerConfigs = {
@@ -15,7 +15,8 @@ export const ServerConfigs = {
     console.warn(`Config key Server.Port = ${port} isn't a port (1-65535); defaulting to 3000`);
     return 3000;
   },
-  get ASSETS_DIR() { return path.resolve(ROOT, ConfigMgr.getString('Server.AssetsDir', 'assets')); },
+  /** The assets folder the Voyage extractor made, shared with Voyage-Server and Voyage-Editor. */
+  get ASSETS_DIR() { return path.resolve(ROOT, ConfigMgr.getString('Server.AssetsDir', '../voyage-assets')); },
   /** Where the server keeps what it makes from the assets (the sheets). */
   get CACHE_DIR() { return path.resolve(ROOT, ConfigMgr.getString('Server.CacheDir', 'cache')); },
   /** Server.Sheets (a client.conf that still has only the name it had first, Server.CharacterSheets, goes by that). */
@@ -23,6 +24,7 @@ export const ServerConfigs = {
     const old = !ConfigMgr.values.has('Server.Sheets') && ConfigMgr.values.has('Server.CharacterSheets');
     return ConfigMgr.getBoolean(old ? 'Server.CharacterSheets' : 'Server.Sheets', true);
   },
+
 
   // ----------------------------RELAY------------------------------
   /** name -> host, the first the default; a bare host is named after itself. */

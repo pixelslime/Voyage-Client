@@ -94,8 +94,9 @@ export class NpcDialog extends Win {
     if (d.type === 0) {
       if (d.prev) this.btn(U.BtPrev, W - 10 - 122 - shift, mid, () => this.reply(0));
       if (d.next) this.primary = this.btn(U.BtNext, W - 10 - 68 - shift, mid, () => this.reply(1));
-      // a say page answers 1 for NEXT, 0 for PREV and -1 (0xFF) for anything else, OK included
-      else this.primary = this.btn(U.BtOK, W - 54, low, () => this.reply(-1));
+      // a say page answers 1 for NEXT and for OK, 0 for PREV and -1 (0xFF) for END CHAT. OK is "go on", as NEXT is:
+      // a script whose last page before the reward ends in OK (sendOk, sendPrev) hands it out on that answer
+      else this.primary = this.btn(U.BtOK, W - 54, low, () => this.reply(1));
     } else if (d.type === 1) { this.btn(U.BtYes, W - 108, low, () => this.reply(1)); this.btn(U.BtNo, W - 54, low, () => this.reply(0)); }
     else if (d.type === 12) { this.btn(U.BtQYes, W - 130, low, () => this.reply(1)); this.btn(U.BtQNo, W - 65, low, () => this.reply(0)); }
     else if (input) this.primary = this.btn(U.BtOK, W - 54, low, () => this.submit());

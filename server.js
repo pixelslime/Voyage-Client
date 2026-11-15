@@ -12,6 +12,7 @@ import { ConfigMgr, ConfigException, confDir } from './configmgr.mjs';
 import { ServerConfigs } from './serverconfigs.mjs';
 import { SheetStore } from './sheets.mjs';
 import { clientConfigs } from './src/config.js';
+import { Customs, assetsId } from './customs.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +33,6 @@ try {
 } catch (err) {
   console.error('CRITICAL BUILD ERROR:', err);
 }
-
 const HOST = ServerConfigs.HOST;
 const PORT = ServerConfigs.PORT;
 const ASSETS_DIR = ServerConfigs.ASSETS_DIR;
@@ -41,14 +41,22 @@ const CLIENT_CONFIG = clientConfigs(ConfigMgr);
 const portAllowed = (p) => p === 8484 || (p >= 7575 && p <= 7699);
 
 const app = express();
+// The assets' customs folder (customs.mjs): its files are served in place of the assets' own.
+const customs = new Customs(ASSETS_DIR);
 // Characters, NPCs, monsters and tile sets as sheets (sheets.mjs): a file's tree with each image's place in its
 // sheets, and the sheets it names. They are made from the assets as the server starts and kept in the cache folder;
 // one asked for before they are all there is made first.
 const sheets = ServerConfigs.SHEETS ? SheetStore.open(ASSETS_DIR, path.join(ServerConfigs.CACHE_DIR, 'sheets')) : null;
 CLIENT_CONFIG.sheets = !!sheets;   // (what the client asks by: on only when the sheets can be kept)
-if (sheets) {
-  app.get(/^\/assets\/_sheets\/(.+\.img)\.json$/, (req, res, next) => {
+// Which assets these are: the page asks for asset files by it, so when the assets are extracted again a copy a
+// browser kept of the old files isn't used.
+CLIENT_CONFIG.assets = assetsId(ASSETS_DIR);
+const serveSheets = (web, guard = (req, res, next) => next()) => {
+  if (!sheets) return;
+  web.get(/^\/assets\/_sheets\/(.+\.img)\.json$/, guard, (req, res, next) => {
     if (/(^|\/)\.\.?(\/|$)/.test(req.params[0])) { res.status(404).end(); return; }
+    // (one the customs folder changes: as it is, from the files)
+    if (customs.has(req.params[0])) { req.url = `/assets/${req.params[0]}.json${req.query.v ? `?v=${encodeURIComponent(req.query.v)}` : ''}`; next(); return; }
     sheets.tree(req.params[0]).then((file) => {
       if (file) {   // (kept gzipped, and sent so to every browser: all of them take it)
         res.set({ 'Content-Type': 'application/json; charset=utf-8', Vary: 'Accept-Encoding' });
@@ -61,15 +69,23 @@ if (sheets) {
     }, next);
   });
   // (a sheet's address has its file's version in it, so it never changes: the browser may keep it)
-  app.get(/^\/assets\/_sheets\/(.+\.img)\/((?:\d+\.)?[12])\.([0-9a-f]{10})\.png$/, (req, res, next) => {
+  web.get(/^\/assets\/_sheets\/(.+\.img)\/((?:\d+\.)?[12])\.([0-9a-f]{10})\.png$/, guard, (req, res, next) => {
     sheets.sheet(req.params[0], req.params[1], req.params[2]).then((file) => {
       if (file) res.sendFile(file, { maxAge: '1y', immutable: true, dotfiles: 'allow' }); else res.status(404).end();
     }, next);
   });
-}
-app.use('/assets', express.static(ASSETS_DIR, { maxAge: '1d', fallthrough: false, dotfiles: 'allow' }));
+};
+serveSheets(app);
+// what the customs folder holds for the game server alone (monsters' drops, NPC scripts) is never handed out
+app.use(['/assets/server', '/assets/scripts'], (req, res) => res.status(404).end());
+app.use('/assets', express.static(customs.dir, { maxAge: '1d', dotfiles: 'allow' }));   // the customs first
+app.use('/assets', express.static(ASSETS_DIR, { maxAge: '1d', fallthrough: false, dotfiles: 'allow' }), (err, req, res, next) => {
+  if (err.status !== 404) { next(err); return; }
+  console.warn(`${String(req.ip || '').replace(/^::ffff:/, '')} asked for /assets${req.path}, which the assets haven't got`);
+  res.status(404).end();
+});
 app.get('/servers.json', (req, res) => res.json(Object.keys(SERVERS)));
-app.get('/config.json', (req, res) => res.json(CLIENT_CONFIG));
+app.get('/config.json', (req, res) => res.set('Cache-Control', 'no-store').json({ ...CLIENT_CONFIG, custom: customs.now().versions }));
 // Which build the server has now: a page still running an older one tells its player to reload.
 app.get('/build.json', (req, res) => res.set('Cache-Control', 'no-store').json({ id: BUILD_ID }));
 // The page is never kept by the browser and asks for the script and the stylesheet by the build's id, so a reload
@@ -141,7 +157,7 @@ wss.on('connection', (ws, req) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Voyage client on http://${HOST}:${PORT} (assets: ${ASSETS_DIR})`);
-  console.log('Cosmic servers:', SERVERS);
+  console.log(`Voyage client on http://${HOST}:${PORT} (assets: ${ASSETS_DIR}, customs: ${customs.dir})`);
+  console.log('Game servers:', SERVERS);
   if (sheets) sheets.makeAll().catch((e) => console.log(`Sheets: the start-up run stopped (${e.message}); the rest are made as they are asked for.`));
 });
