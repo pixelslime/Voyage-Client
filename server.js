@@ -76,8 +76,21 @@ const serveSheets = (web, guard = (req, res, next) => next()) => {
   });
 };
 serveSheets(app);
-// what the customs folder holds for the game server alone (monsters' drops, NPC scripts) is never handed out
-app.use(['/assets/server', '/assets/scripts'], (req, res) => res.status(404).end());
+// What the customs folder holds for the game server alone (monsters' drops, NPC scripts) is never handed out. The
+// check is on the path the static middleware will actually resolve, not on req.path: express matches its own route
+// patterns exactly, so '/assets//server/x' and '/assets/%73erver/x' slipped past a pattern and were then served
+// (static decodes and collapses both). Normalising and decoding first closes those spellings.
+const SERVER_ONLY = new Set(['server', 'scripts']);
+app.use('/assets', (req, res, next) => {
+  let p = req.path;
+  try { p = decodeURIComponent(p); } catch { /* a malformed escape is left as it is: static will refuse it */ }
+  // a second pass catches an escape that decodes to another escape (%2573 -> %73 -> s)
+  try { p = decodeURIComponent(p); } catch { /* as above */ }
+  p = path.posix.normalize(p);
+  const first = p.split('/').filter(Boolean)[0];
+  if (SERVER_ONLY.has(first)) { res.status(404).end(); return; }
+  next();
+});
 app.use('/assets', express.static(customs.dir, { maxAge: '1d', dotfiles: 'allow' }));   // the customs first
 app.use('/assets', express.static(ASSETS_DIR, { maxAge: '1d', fallthrough: false, dotfiles: 'allow' }), (err, req, res, next) => {
   if (err.status !== 404) { next(err); return; }

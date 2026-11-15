@@ -53,6 +53,12 @@ const IMAGE_SLOTS = 12;
 const PACKED = /^(?:Character|Npc|Mob)\/|^Map\/Tile\//;
 /** A load that hasn't finished in this long gives its slot up (it still counts once it comes in). */
 const SLOT_TIMEOUT_MS = 20000;
+/**
+ * How many images imgCache holds before the least recently drawn ones are dropped. It is keyed by canvas path and was
+ * never pruned, so a long session crossing many maps kept every tile and monster it had ever drawn. Entries still
+ * loading, and those of the map in hand, are never dropped (see _evict).
+ */
+const IMAGE_CACHE_MAX = 4000;
 
 /** What a picture is asked for by: its own version or its .img's when the customs folder changes it, else the assets'. */
 function pictureVersion(canvas) {
@@ -72,12 +78,30 @@ export class Assets {
     this.firstDraws = 0; this.firstPx = 0;   // images asked for to draw for the first time, and their pixels (the /fps meter)
     this.useSheets = true;   // /fps sheets: packed images drawn from the server's sheets, or each from its own file
     this.cuts = new WeakMap();   // canvas node -> its image cut out of its sheet, for whoever asks for it whole (image)
+    this.uses = 0;           // ticks on every imgCache ask, so _evict can drop the least recently drawn
     this.sheets = 0;         // sheets loaded so far (the /fps report)
     this._slice = { img: null, x: 0, y: 0, w: 0, h: 0 };
   }
 
-  /** Drops a file the page holds (null: every one), so the next ask fetches it again. */
-  forget(path) { if (path === null) this.jsonCache.clear(); else this.jsonCache.delete(path); }
+  /**
+   * Drops a file the page holds (null: every one), so the next ask fetches it again. A path naming an .img also drops
+   * every picture under it, which is what the customs folder reports a version for: without that, a re-published map's
+   * tiles stayed in imgCache and the map kept drawing the old ones.
+   */
+  forget(path) {
+    if (path === null) { this.jsonCache.clear(); this.imgCache.clear(); this.cuts = new WeakMap(); return; }
+    this.jsonCache.delete(path);
+    // the .img a path belongs to, whether it is the .img itself or a file inside it
+    const at = path.indexOf('.img');
+    const img = at > 0 ? path.slice(0, at + 4) : null;
+    let dropped = false;
+    for (const key of this.imgCache.keys()) {
+      if (key === path || (img && key.startsWith(`${img}/`))) { this.imgCache.delete(key); dropped = true; }
+    }
+    // a cut-out is the node's slice of a sheet's image: once that image can be refetched the cuts are stale too
+    // (a WeakMap cannot be pruned by key, and the nodes that hold them are still live)
+    if (dropped) this.cuts = new WeakMap();
+  }
 
   json(path) {
     if (!this.jsonCache.has(path)) {
@@ -110,10 +134,30 @@ export class Assets {
       e = { img: null, ready: false, tries: e?.tries || 0, src: `${this.base}/${node._canvas}${node._canvas.startsWith('_sheets/') ? '' : pictureVersion(node._canvas)}`, pri: this.waiting.length, started: false, sheet: node._canvas.startsWith('_sheets/') ? node : null };
       e.promise = new Promise((res) => { e.settle = res; });
       this.imgCache.set(node._canvas, e);
+      if (this.imgCache.size > IMAGE_CACHE_MAX) this._evict(node._canvas);
     }
+    e.used = ++this.uses;
     // asked for sooner than it was waiting for: it moves up (and is passed over where it waited before)
     if (!e.started && pri < e.pri) { e.pri = pri; this.waiting[pri].push(e); this._pump(); }
     return e;
+  }
+
+  /**
+   * Drops the least recently drawn images once the cache is over its bound, keeping the one just asked for. Only
+   * settled entries go: one still loading would leave whoever awaits its promise with nothing, and one queued has
+   * not been drawn at all. The oldest are taken first, by the tick _entry stamps on every ask.
+   */
+  _evict(keep) {
+    const spare = this.imgCache.size - IMAGE_CACHE_MAX;
+    if (spare <= 0) return;
+    const settled = [];
+    for (const [key, e] of this.imgCache) {
+      if (key === keep || !e.started || e.err || !e.ready) continue;
+      settled.push([key, e.used || 0]);
+    }
+    if (settled.length <= spare) return;
+    settled.sort((a, b) => a[1] - b[1]);
+    for (let i = 0; i < spare; i++) this.imgCache.delete(settled[i][0]);
   }
 
   /** Starts waiting images while there are free slots, most urgent first. */
