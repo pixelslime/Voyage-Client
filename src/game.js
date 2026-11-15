@@ -55,7 +55,7 @@ import { WishListInputWin, WeddingGiftWin } from './ui/weddinggifts.js';
 import { uiText, TextField } from './ui/wzui.js';
 import { ShopBoards } from './shopboards.js';
 import { Kites } from './kites.js';
-import { morphTemplate, morphTemplateNow, MorphView, isSuperman, isNormalMorph, isHideMorph, supermanPlainAttackOk, SUPERMAN_BLOCKED } from './morph.js';
+import { morphTemplate, morphTemplateNow, MorphView, isHideMorph, supermanPlainAttackOk, SUPERMAN_BLOCKED } from './morph.js';
 import { ProposalWaitWin, InvitationWin } from './ui/wedding.js';
 import { NewYearCardWin, NewYearCardViewWin } from './ui/newyear.js';
 import { RaiseWin, IncubatorWin, TreasureBoxWin } from './ui/etcwins.js';
