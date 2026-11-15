@@ -495,11 +495,11 @@ export class StatusBar {
 
   /**
    * The quick slots' keys, the first panel's then the second's; right Shift's bindings are left Shift's.
-   * Cached against the two source arrays: game.quickKeys / quickKeys2 are replaced (never mutated) by every writer
+   * Cached against the two source arrays: game.quickKeys / localQuickKeys are replaced (never mutated) by every writer
    * (the quickslots packet, Key Setting's setQuickKeys), so a new array is the only way the pair can change.
    */
   get quickKeys() {
-    const a = this.game.quickKeys, b = this.game.quickKeys2, c = this.quickCache;
+    const a = this.game.quickKeys, b = this.game.localQuickKeys, c = this.quickCache;
     if (!c || c.a !== a || c.b !== b) {
       this.quickCache = { a, b, keys: [...(a || DEFAULT_QUICKSLOTS), ...(b || DEFAULT_QUICKSLOTS2)].map((sc) => (sc === 54 ? 42 : sc)) };
     }
